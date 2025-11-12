@@ -1,7 +1,10 @@
 import React from "react";
+import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import CategoryClient from "./CategoryClient";
+import { getSiteUrl, getProductsByCategory, getAllProducts } from "@/lib/products";
+import { CollectionPageJsonLd, BreadcrumbJsonLd } from "@/components/seo/JsonLd";
 
 export async function generateStaticParams() {
   return [
@@ -15,6 +18,49 @@ export async function generateStaticParams() {
   ];
 }
 
+export async function generateMetadata({
+  params,
+}: {
+  params: { category: string };
+}): Promise<Metadata> {
+  const categoryInfo = getCategoryInfo(params.category);
+  const siteUrl = getSiteUrl();
+  const categoryUrl = `${siteUrl}/categories/${params.category}`;
+
+  return {
+    title: categoryInfo.name,
+    description: categoryInfo.description,
+    keywords: [
+      categoryInfo.name,
+      "LUMINA",
+      "패션",
+      "의류",
+      "온라인쇼핑",
+      categoryInfo.name === "신상품" ? "신상" : "",
+      categoryInfo.name === "베스트" ? "인기상품" : "",
+      categoryInfo.name === "세일" ? "할인" : "",
+    ]
+      .filter(Boolean)
+      .join(", "),
+    openGraph: {
+      title: `${categoryInfo.name} - LUMINA`,
+      description: categoryInfo.description,
+      type: "website",
+      url: categoryUrl,
+      siteName: "LUMINA",
+      locale: "ko_KR",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${categoryInfo.name} - LUMINA`,
+      description: categoryInfo.description,
+    },
+    alternates: {
+      canonical: categoryUrl,
+    },
+  };
+}
+
 export default function CategoryPage({
   params,
 }: {
@@ -22,10 +68,67 @@ export default function CategoryPage({
 }) {
   // 서버 사이드에서 카테고리 정보 처리
   const categoryInfo = getCategoryInfo(params.category);
-  const categoryProducts = getCategoryProducts(params.category);
+  const siteUrl = getSiteUrl();
+  const categoryUrl = `${siteUrl}/categories/${params.category}`;
+
+  // 실제 상품 데이터 가져오기
+  let categoryProducts: any[] = [];
+  if (params.category === "new") {
+    categoryProducts = getAllProducts()
+      .filter((p) => p.isNew)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        images: p.images,
+      }));
+  } else if (params.category === "best") {
+    categoryProducts = getAllProducts()
+      .filter((p) => p.isBest)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        images: p.images,
+      }));
+  } else if (params.category === "sale") {
+    categoryProducts = getAllProducts()
+      .filter((p) => p.isSale)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        images: p.images,
+      }));
+  } else {
+    categoryProducts = getProductsByCategory(params.category).map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      images: p.images,
+    }));
+  }
+
+  // 클라이언트 컴포넌트용 상품 데이터 (기존 형식 유지)
+  const clientProducts = getCategoryProducts(params.category);
+
+  // 브레드크럼 데이터
+  const breadcrumbs = [
+    { name: "홈", url: siteUrl },
+    { name: categoryInfo.name, url: categoryUrl },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* JSON-LD 구조화 데이터 */}
+      <CollectionPageJsonLd
+        name={categoryInfo.name}
+        description={categoryInfo.description}
+        url={categoryUrl}
+        products={categoryProducts}
+      />
+      <BreadcrumbJsonLd items={breadcrumbs} />
+
       <Header />
 
       <main className="container mx-auto py-8">
@@ -50,7 +153,7 @@ export default function CategoryPage({
         </div>
 
         <CategoryClient
-          products={categoryProducts}
+          products={clientProducts}
           categoryName={categoryInfo.name}
           categorySlug={params.category}
         />

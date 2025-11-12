@@ -1,53 +1,99 @@
 import React from "react";
+import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ProductDetailClient from "@/components/product/ProductDetailClient";
 import RelatedProducts from "@/components/product/RelatedProducts";
 import ProductTabs from "@/components/product/ProductTabs";
 import ProductDetailWrapper from "./ProductDetailWrapper";
+import { getProductById, getAllProducts, getSiteUrl } from "@/lib/products";
+import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/seo/JsonLd";
 
-// Static generation for export - 기본 상품 ID들
+// Static generation for export - 모든 활성 상품 ID 생성
 export async function generateStaticParams() {
-  // 기본 샘플 상품들의 ID만 생성 (실제로는 모든 상품 ID를 가져와야 함)
-  return [{ id: "1" }, { id: "2" }, { id: "3" }, { id: "4" }, { id: "5" }];
+  const products = getAllProducts();
+  return products.map((product) => ({
+    id: product.id,
+  }));
 }
 
 // Generate metadata for each product
-export async function generateMetadata({ params }: { params: { id: string } }) {
-  // 스토어에서 상품 데이터 가져오기 (서버 사이드에서는 직접 접근 불가)
-  // 클라이언트 사이드에서 동적으로 메타데이터를 설정하거나
-  // API를 통해 상품 정보를 가져와야 함
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const product = getProductById(params.id);
+  const siteUrl = getSiteUrl();
 
-  // 임시로 기본 메타데이터 사용 (실제 구현에서는 API 호출 필요)
-  const defaultProduct = {
-    name: "LUMINA 상품",
-    description:
-      "LUMINA의 프리미엄 패션 아이템으로 당신의 일상을 빛나게 만듭니다.",
-  };
+  if (!product) {
+    return {
+      title: "상품을 찾을 수 없습니다 - LUMINA",
+      description: "요청하신 상품이 존재하지 않거나 삭제되었습니다.",
+    };
+  }
+
+  const productUrl = `${siteUrl}/products/${product.id}`;
+  const productImage = product.images[0] || `${siteUrl}/og-default.jpg`;
+  const price = product.originalPrice || product.price;
+  const discountPercent = product.originalPrice
+    ? Math.round(
+        ((product.originalPrice - product.price) / product.originalPrice) * 100
+      )
+    : 0;
 
   return {
-    title: `${defaultProduct.name} - LUMINA`,
-    description: defaultProduct.description,
+    title: `${product.name} - LUMINA`,
+    description: product.description,
+    keywords: [
+      product.name,
+      product.category,
+      product.subCategory,
+      ...product.tags,
+      "LUMINA",
+      "패션",
+      "의류",
+    ].join(", "),
     openGraph: {
-      title: defaultProduct.name,
-      description: defaultProduct.description,
-      type: "website",
+      title: product.name,
+      description: product.description,
+      type: "product",
+      url: productUrl,
+      siteName: "LUMINA",
       images: [
         {
-          url: "https://images.pexels.com/photos/2703907/pexels-photo-2703907.jpeg?auto=compress&cs=tinysrgb&w=800",
+          url: productImage,
+          width: 1200,
+          height: 630,
+          alt: product.name,
+        },
+        ...product.images.slice(1, 4).map((img) => ({
+          url: img,
           width: 800,
           height: 800,
-          alt: defaultProduct.name,
-        },
+          alt: product.name,
+        })),
       ],
+      locale: "ko_KR",
     },
     twitter: {
       card: "summary_large_image",
-      title: defaultProduct.name,
-      description: defaultProduct.description,
-      images: [
-        "https://images.pexels.com/photos/2703907/pexels-photo-2703907.jpeg?auto=compress&cs=tinysrgb&w=800",
-      ],
+      title: product.name,
+      description: product.description,
+      images: [productImage],
+    },
+    alternates: {
+      canonical: productUrl,
+    },
+    other: {
+      "product:price:amount": product.price.toString(),
+      "product:price:currency": "KRW",
+      "product:availability": product.stock > 0 ? "in stock" : "out of stock",
+      "product:condition": "new",
+      "product:retailer": "LUMINA",
+      ...(discountPercent > 0 && {
+        "product:discount": discountPercent.toString(),
+      }),
     },
   };
 }
@@ -57,8 +103,49 @@ export default function ProductDetailPage({
 }: {
   params: { id: string };
 }) {
+  const product = getProductById(params.id);
+  const siteUrl = getSiteUrl();
+
+  // 브레드크럼 데이터
+  const breadcrumbs = [
+    { name: "홈", url: siteUrl },
+    { name: "상품", url: `${siteUrl}/products` },
+    ...(product
+      ? [
+          {
+            name: product.category === "top" ? "상의" : product.category === "bottom" ? "하의" : product.category === "dress" ? "원피스" : product.category === "outer" ? "아우터" : product.category,
+            url: `${siteUrl}/categories/${product.category}`,
+          },
+          { name: product.name, url: `${siteUrl}/products/${product.id}` },
+        ]
+      : []),
+  ];
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
+      {/* JSON-LD 구조화 데이터 */}
+      {product && (
+        <>
+          <ProductJsonLd
+            product={{
+              id: product.id,
+              name: product.name,
+              description: product.description,
+              price: product.price,
+              originalPrice: product.originalPrice,
+              images: product.images,
+              category: product.category,
+              subCategory: product.subCategory,
+              rating: product.rating,
+              reviewCount: product.reviewCount,
+              stock: product.stock,
+              brand: "LUMINA",
+            }}
+          />
+          <BreadcrumbJsonLd items={breadcrumbs} />
+        </>
+      )}
+
       <Header />
 
       <main
