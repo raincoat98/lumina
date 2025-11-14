@@ -108,6 +108,7 @@ interface ProductManagerProps {
 interface ProductFormData {
   name: string;
   price: number;
+  salePrice: number;
   originalPrice: number;
   description: string;
   images: string[];
@@ -169,6 +170,7 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
   const [formData, setFormData] = useState<ProductFormData>({
     name: "",
     price: 0,
+    salePrice: 0,
     originalPrice: 0,
     description: "",
     images: [],
@@ -359,6 +361,7 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
       setFormData({
         name: product.name,
         price: product.price,
+        salePrice: product.salePrice || product.price,
         originalPrice: product.originalPrice || product.price,
         description: product.description,
         images: product.images,
@@ -825,9 +828,19 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
     e.preventDefault();
 
     // 할인가 검증
+    const finalSalePrice =
+      formData.salePrice > 0 ? formData.salePrice : formData.price;
+    if (formData.salePrice > 0 && formData.salePrice >= formData.price) {
+      toast({
+        title: "가격 오류",
+        description: "할인가는 원가보다 낮아야 합니다.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (
       formData.originalPrice > 0 &&
-      formData.originalPrice <= formData.price
+      formData.originalPrice <= finalSalePrice
     ) {
       toast({
         title: "가격 오류",
@@ -860,6 +873,10 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
         name: formData.name,
         description: formData.description,
         price: formData.price,
+        salePrice:
+          formData.salePrice > 0 && formData.salePrice !== formData.price
+            ? formData.salePrice
+            : undefined,
         originalPrice:
           formData.originalPrice > 0 &&
           formData.originalPrice !== formData.price
@@ -877,8 +894,9 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
         isActive: formData.isActive ?? true,
         isNew: formData.isNew ?? false,
         isSale:
-          formData.originalPrice > 0 &&
-          formData.originalPrice !== formData.price,
+          (formData.salePrice > 0 && formData.salePrice !== formData.price) ||
+          (formData.originalPrice > 0 &&
+            formData.originalPrice !== formData.price),
         isBest: formData.isBest ?? false,
         isFeatured: formData.isFeatured ?? false,
         isLimited: formData.isLimited ?? false,
@@ -949,6 +967,10 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
         name: formData.name,
         description: formData.description,
         price: formData.price,
+        salePrice:
+          formData.salePrice > 0 && formData.salePrice !== formData.price
+            ? formData.salePrice
+            : undefined,
         originalPrice:
           formData.originalPrice > 0 &&
           formData.originalPrice !== formData.price
@@ -971,8 +993,9 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
         isActive: formData.isActive ?? true,
         isNew: formData.isNew ?? false,
         isSale:
-          formData.originalPrice > 0 &&
-          formData.originalPrice !== formData.price,
+          (formData.salePrice > 0 && formData.salePrice !== formData.price) ||
+          (formData.originalPrice > 0 &&
+            formData.originalPrice !== formData.price),
         isBest: formData.isBest ?? false,
         isFeatured: formData.isFeatured ?? false,
         isLimited: formData.isLimited ?? false,
@@ -1018,6 +1041,7 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
     setFormData({
       name: "",
       price: 0,
+      salePrice: 0,
       originalPrice: 0,
       description: "",
       images: [],
@@ -1228,6 +1252,47 @@ export default function ProductManager({ onEditProduct }: ProductManagerProps) {
                   required
                   className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                 />
+              </div>
+              <div>
+                <Label
+                  htmlFor="salePrice"
+                  className="text-gray-900 dark:text-gray-100"
+                >
+                  할인가 (실제 판매가)
+                </Label>
+                <Input
+                  id="salePrice"
+                  type="number"
+                  value={formData.salePrice}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "salePrice",
+                      parseInt(e.target.value) || 0
+                    )
+                  }
+                  placeholder="할인가를 입력하세요 (원가보다 낮아야 함)"
+                  min="0"
+                  className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                />
+                {formData.salePrice > 0 &&
+                  formData.salePrice >= formData.price && (
+                    <p className="text-xs text-red-500 mt-1">
+                      할인가는 원가({formData.price.toLocaleString()}원)보다
+                      낮아야 합니다.
+                    </p>
+                  )}
+                {formData.salePrice > 0 &&
+                  formData.salePrice < formData.price && (
+                    <p className="text-xs text-green-600 mt-1">
+                      할인율:{" "}
+                      {Math.round(
+                        ((formData.price - formData.salePrice) /
+                          formData.price) *
+                          100
+                      )}
+                      %
+                    </p>
+                  )}
               </div>
               <div>
                 <Label

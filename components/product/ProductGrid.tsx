@@ -18,6 +18,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  salePrice?: number;
   originalPrice?: number;
   images: string[];
   category: string;
@@ -401,7 +402,10 @@ export default function ProductGrid({
 
     if (filters.onSale) {
       result = result.filter(
-        (product) => product.isSale || product.originalPrice
+        (product) =>
+          product.isSale ||
+          product.salePrice ||
+          (product.originalPrice && product.originalPrice > product.price)
       );
     }
 
@@ -709,11 +713,14 @@ function ProductGridItem({
   const { isInWishlist } = useProductStore();
   const isWishlisted = isInWishlist(product.id);
 
-  const discountPercentage = product.originalPrice
-    ? Math.round(
-        ((product.originalPrice - product.price) / product.originalPrice) * 100
-      )
-    : 0;
+  // salePrice가 있으면 할인가로 사용, 없으면 price를 할인가로 사용
+  const salePrice = product.salePrice || product.price;
+  const originalPrice = product.originalPrice || product.price;
+
+  const discountPercentage =
+    salePrice < originalPrice
+      ? Math.round(((originalPrice - salePrice) / originalPrice) * 100)
+      : 0;
 
   return (
     <Card
@@ -846,7 +853,7 @@ function ProductGridItem({
           {isMobile ? (
             // 모바일: 할인율과 최종금액 표시
             <div>
-              {product.originalPrice ? (
+              {discountPercentage > 0 ? (
                 <div className="flex items-center space-x-1">
                   <span className="text-[10px] text-red-500 font-medium">
                     {discountPercentage}%
@@ -860,8 +867,13 @@ function ProductGridItem({
                       "text-xs"
                     )}
                   >
-                    {product.price.toLocaleString()}원
+                    {salePrice.toLocaleString()}원
                   </span>
+                  {originalPrice > salePrice && (
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 line-through">
+                      {originalPrice.toLocaleString()}원
+                    </span>
+                  )}
                 </div>
               ) : (
                 <span
@@ -873,14 +885,14 @@ function ProductGridItem({
                     "text-xs"
                   )}
                 >
-                  {product.price.toLocaleString()}원
+                  {salePrice.toLocaleString()}원
                 </span>
               )}
             </div>
           ) : (
             // 데스크톱: 할인율과 최종금액 표시
             <div>
-              {product.originalPrice ? (
+              {discountPercentage > 0 ? (
                 <div className="flex items-center space-x-2">
                   <span className="text-xs text-red-500 font-medium">
                     {discountPercentage}%
@@ -894,8 +906,13 @@ function ProductGridItem({
                       "text-sm"
                     )}
                   >
-                    {product.price.toLocaleString()}원
+                    {salePrice.toLocaleString()}원
                   </span>
+                  {originalPrice > salePrice && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
+                      {originalPrice.toLocaleString()}원
+                    </span>
+                  )}
                 </div>
               ) : (
                 <span
@@ -907,7 +924,7 @@ function ProductGridItem({
                     "text-sm"
                   )}
                 >
-                  {product.price.toLocaleString()}원
+                  {salePrice.toLocaleString()}원
                 </span>
               )}
             </div>

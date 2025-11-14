@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import {
   useProductStore,
   Product as StoreProduct,
@@ -22,31 +22,37 @@ export interface Product {
 
 // StoreProduct를 Product로 변환하는 함수
 const convertStoreProductToProduct = (storeProduct: StoreProduct): Product => {
-  const discount = storeProduct.originalPrice
-    ? Math.round(
-        ((storeProduct.originalPrice - storeProduct.price) /
-          storeProduct.originalPrice) *
-          100
-      )
-    : undefined;
+  // salePrice가 있으면 할인가, 없으면 price를 할인가로 사용 (호환성)
+  // 주의: StoreProduct의 price는 원가, salePrice는 할인가
+  const salePrice = storeProduct.salePrice || storeProduct.price;
+  const originalPrice = storeProduct.originalPrice || storeProduct.price;
+
+  const discount =
+    salePrice < originalPrice
+      ? Math.round(((originalPrice - salePrice) / originalPrice) * 100)
+      : undefined;
 
   const convertedProduct = {
     id: storeProduct.id,
     name: storeProduct.name,
-    price: storeProduct.price,
-    originalPrice: storeProduct.originalPrice,
+    price: salePrice, // 할인가를 price로 표시 (기존 인터페이스 호환)
+    originalPrice: salePrice < originalPrice ? originalPrice : undefined,
     image: storeProduct.images[0] || "", // 첫 번째 이미지를 메인 이미지로 사용
     category: storeProduct.category,
     rating: storeProduct.rating,
     reviewCount: storeProduct.reviewCount,
     isNew: storeProduct.isNew,
-    isSale: storeProduct.isSale || !!storeProduct.originalPrice,
+    isSale:
+      !!storeProduct.isSale ||
+      !!storeProduct.salePrice ||
+      !!(
+        storeProduct.originalPrice &&
+        storeProduct.originalPrice > storeProduct.price
+      ),
     discount,
     description: storeProduct.description,
   };
 
-  // 이미지 URL 로그만 출력
-  console.log(`상품 ${convertedProduct.id} 이미지:`, convertedProduct.image);
   return convertedProduct;
 };
 
@@ -64,6 +70,50 @@ export function useProducts() {
 
   // useProductStore에서 상품 데이터 가져오기
   const storeProducts = useProductStore((state) => state.products);
+
+  // storeProducts를 즉시 변환하여 products로 설정
+  const convertedProducts = useMemo(() => {
+    console.log("useProducts useMemo - storeProducts:", {
+      length: storeProducts.length,
+      products: storeProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        isActive: p.isActive,
+      })),
+    });
+
+    if (!storeProducts || storeProducts.length === 0) {
+      console.log("storeProducts가 비어있음");
+      return [];
+    }
+
+    const activeProducts = storeProducts.filter((product) => product.isActive);
+    console.log("활성화된 상품:", activeProducts.length);
+
+    const converted = activeProducts.map(convertStoreProductToProduct);
+    console.log(
+      "변환된 상품:",
+      converted.length,
+      converted.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        originalPrice: p.originalPrice,
+        isSale: p.isSale,
+      }))
+    );
+
+    return converted;
+  }, [storeProducts]);
+
+  // 변환된 상품을 products에 설정
+  useEffect(() => {
+    console.log(
+      "useProducts useEffect - convertedProducts 업데이트:",
+      convertedProducts.length
+    );
+    setData(convertedProducts);
+  }, [convertedProducts, setData]);
 
   // 상품 데이터 로드 (필요시 사용)
   const loadProducts = useCallback(async () => {
@@ -87,74 +137,93 @@ export function useProducts() {
     });
   }, [storeProducts, execute]);
 
-  // storeProducts가 변경될 때마다 products 업데이트
-  useEffect(() => {
-    if (storeProducts.length > 0) {
-      const activeProducts = storeProducts.filter(
-        (product) => product.isActive
-      );
-      const convertedProducts = activeProducts.map(
-        convertStoreProductToProduct
-      );
-      setData(convertedProducts);
-    } else {
-      setData([]);
-    }
-  }, [storeProducts, setData]);
-
   // 카테고리별 상품 필터링
-  const getProductsByCategory = (category: string) => {
-    if (!products || !Array.isArray(products)) {
-      return [];
-    }
+  const getProductsByCategory = useCallback(
+    (category: string) => {
+      const productList = convertedProducts || [];
+      if (!Array.isArray(productList) || productList.length === 0) {
+        return [];
+      }
 
-    // 한글 카테고리명을 영문 카테고리명으로 매핑
-    const categoryMapping: { [key: string]: string } = {
-      상의: "top",
-      하의: "bottom",
-      원피스: "dress",
-      아우터: "outer",
-    };
+      // 한글 카테고리명을 영문 카테고리명으로 매핑
+      const categoryMapping: { [key: string]: string } = {
+        상의: "top",
+        하의: "bottom",
+        원피스: "dress",
+        아우터: "outer",
+      };
 
-    const mappedCategory = categoryMapping[category] || category;
+      const mappedCategory = categoryMapping[category] || category;
 
-    const categoryProducts = products.filter(
-      (product) => product.category === mappedCategory
-    );
-    console.log(
-      `${category}(${mappedCategory}) 카테고리 필터링 결과:`,
-      categoryProducts
-    );
-    return categoryProducts;
-  };
+      const categoryProducts = productList.filter(
+        (product) => product.category === mappedCategory
+      );
+      console.log(
+        `${category}(${mappedCategory}) 카테고리 필터링 결과:`,
+        categoryProducts.length,
+        categoryProducts.map((p) => ({ id: p.id, name: p.name }))
+      );
+      return categoryProducts;
+    },
+    [convertedProducts]
+  );
 
   // 신상품 필터링
-  const getNewProducts = () => {
-    if (!products || !Array.isArray(products)) {
+  const getNewProducts = useCallback(() => {
+    const productList = convertedProducts || [];
+    if (!Array.isArray(productList) || productList.length === 0) {
       return [];
     }
-    const newProducts = products.filter((product) => product.isNew);
-    console.log("신상품 필터링 결과:", newProducts);
+    const newProducts = productList.filter((product) => product.isNew);
+    console.log(
+      "신상품 필터링 결과:",
+      newProducts.length,
+      newProducts.map((p) => ({ id: p.id, name: p.name }))
+    );
     return newProducts;
-  };
+  }, [convertedProducts]);
 
   // 할인 상품 필터링
-  const getSaleProducts = () => {
-    if (!products || !Array.isArray(products)) {
+  const getSaleProducts = useCallback(() => {
+    const productList = convertedProducts || [];
+    if (!Array.isArray(productList) || productList.length === 0) {
+      console.log("할인 상품 필터링: convertedProducts가 없음", {
+        convertedProducts,
+        type: typeof convertedProducts,
+      });
       return [];
     }
-    const saleProducts = products.filter((product) => product.isSale);
-    console.log("할인 상품 필터링 결과:", saleProducts);
+    // 변환된 Product는 이미 price가 할인가이고, originalPrice가 있으면 할인 상품
+    const saleProducts = productList.filter(
+      (product) =>
+        product.isSale ||
+        (product.originalPrice && product.originalPrice > product.price)
+    );
+    console.log("할인 상품 필터링 결과:", {
+      totalProducts: productList.length,
+      saleProducts: saleProducts.length,
+      products: saleProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        isSale: p.isSale,
+        originalPrice: p.originalPrice,
+        price: p.price,
+      })),
+    });
     return saleProducts;
-  };
+  }, [convertedProducts]);
 
   // 인기 상품 필터링 (평점 기준)
-  const getPopularProducts = (limit: number = 8) => {
-    if (!products || !Array.isArray(products)) {
-      return [];
-    }
-    return products.sort((a, b) => b.rating - a.rating).slice(0, limit);
-  };
+  const getPopularProducts = useCallback(
+    (limit: number = 8) => {
+      const productList = convertedProducts || [];
+      if (!Array.isArray(productList) || productList.length === 0) {
+        return [];
+      }
+      return productList.sort((a, b) => b.rating - a.rating).slice(0, limit);
+    },
+    [convertedProducts]
+  );
 
   // 이미지 URL 검증
   const isValidImageUrl = (url: string): boolean => {
@@ -168,21 +237,27 @@ export function useProducts() {
   };
 
   // 상품 검색
-  const searchProducts = (query: string) => {
-    if (!products || !Array.isArray(products)) {
-      return [];
-    }
-    const lowercaseQuery = query.toLowerCase();
-    return products.filter(
-      (product) =>
-        product.name.toLowerCase().includes(lowercaseQuery) ||
-        product.category.toLowerCase().includes(lowercaseQuery) ||
-        product.description?.toLowerCase().includes(lowercaseQuery)
-    );
-  };
+  const searchProducts = useCallback(
+    (query: string) => {
+      const productList = convertedProducts || [];
+      if (!Array.isArray(productList) || productList.length === 0) {
+        return [];
+      }
+      const lowercaseQuery = query.toLowerCase();
+      return productList.filter(
+        (product) =>
+          product.name.toLowerCase().includes(lowercaseQuery) ||
+          product.category.toLowerCase().includes(lowercaseQuery) ||
+          product.description?.toLowerCase().includes(lowercaseQuery)
+      );
+    },
+    [convertedProducts]
+  );
+
+  const productList = convertedProducts || [];
 
   return {
-    products: products || [],
+    products: Array.isArray(productList) ? productList : [],
     loading,
     error,
     getProductsByCategory,
@@ -192,7 +267,7 @@ export function useProducts() {
     searchProducts,
     reloadProducts: loadProducts,
     // 안전한 getter 함수들
-    getProductsSafely: () => products || [],
-    hasProducts: () => !!(products && products.length > 0),
+    getProductsSafely: () => (Array.isArray(productList) ? productList : []),
+    hasProducts: () => Array.isArray(productList) && productList.length > 0,
   };
 }

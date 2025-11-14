@@ -11,13 +11,27 @@ export default function SalePage() {
 
   // 세일 상품만 필터링하고 ProductGrid에 맞는 형태로 변환
   const saleProducts = products
-    .filter((product) => product.isSale || product.originalPrice)
-    .map((product) => ({
-      ...product,
-      images: product.images || ["/images/placeholder.jpg"],
-      isSale: true,
-      inStock: true,
-    }));
+    .filter(
+      (product) =>
+        product.isSale ||
+        product.salePrice ||
+        (product.originalPrice && product.originalPrice > product.price)
+    )
+    .map((product) => {
+      // salePrice가 있으면 할인가로 사용, 없으면 price를 할인가로 사용
+      const salePrice = product.salePrice || product.price;
+      const originalPrice = product.originalPrice || product.price;
+
+      return {
+        ...product,
+        price: salePrice, // 할인가를 price로 설정
+        salePrice: product.salePrice,
+        originalPrice: salePrice < originalPrice ? originalPrice : undefined,
+        images: product.images || ["/images/placeholder.jpg"],
+        isSale: true,
+        inStock: true,
+      };
+    });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

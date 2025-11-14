@@ -6,8 +6,9 @@ export interface Product {
   id: string;
   name: string;
   description: string;
-  price: number; // 할인가 (실제 판매가)
-  originalPrice?: number; // 원가 (할인 전 가격)
+  price: number; // 원가
+  salePrice?: number; // 할인가 (실제 판매가)
+  originalPrice?: number; // 원가 (할인 전 가격, price와 동일, 하위 호환성 유지)
   category: string;
   subCategory?: string;
   images: string[];
